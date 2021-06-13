@@ -2,7 +2,8 @@ import random
 import numpy as np
 import time
 from math import e
-import cplex
+from docplex.mp.model import Model  # type: ignore
+from docplex.mp.linear import Var  # type: ignore
 
 class Driver:
     def __init__(self,time_in,time_out,initial_location):
@@ -89,80 +90,52 @@ for epoch in range(TOTAL_EPOCHS):
     m = len(riders)
     n = len(drivers)
 
-    problem = cplex.Cplex()
-    problem.set_log_stream(None)
-    problem.set_error_stream(None)
-    problem.set_warning_stream(None)
-    problem.set_results_stream(None)
+    model = Model()
 
 
-    problem.objective.set_sense(problem.objective.sense.maximize)
     names = []
     objective = []
     
     for i in range(m):
         for j in range(n):
-            names.append("x{}_{}".format(i,j))
+            variable = model.continuous_var(name='x{}_{}'.format(i, j))
+            names.append(variable)
             objective.append(rider_valuation[i]-rider_costs[i])
 
-    lower_bounds = [0 for i in range(n*m)]
-    upper_bounds = []
-    for i in range(m):
-        for j in range(n):
             driver_loc = drivers[j].location
             rider_loc = riders[i].start
-            if drivers[j].occupied or travel_times[driver_loc][rider_loc]>delta:
-                upper_bounds.append(0)
-            else:
-                upper_bounds.append(1)
-    problem.variables.add(obj = objective,
-                          lb = lower_bounds,
-                          ub = upper_bounds,
-                          names = names)
+            upper_bound = int(not(drivers[j].occupied or travel_times[driver_loc][rider_loc]>delta))
+            
+            model.add_constraint(variable<=upper_bound)
 
+    score = model.sum(objective[i] * names[i] for i in range(len(names)))
+    model.maximize(score)
 
-    constraint_names = []
-    constraints = []
 
     for i in range(m):
-        constraint_names.append("c{}".format(i))
         variables = []
         for j in range(n):
-            variables.append("x{}_{}".format(i,j))
-        constraints.append([variables,[1 for i in range(len(variables))]])
+            variables.append(i*n+j)
+        model.add_constraint(model.sum(names[o] for o in variables)<=1)
 
 
     for j in range(n):
-        constraint_names.append("d{}".format(j))
         variables = []
         for i in range(m):
-            variables.append("x{}_{}".format(i,j))
-
-        constraints.append([variables,[1 for i in range(len(variables))]])
-    rhs = [1 for i in range(len(constraints))]
-    constraint_senses = ["L" for i in range(len(rhs))]
+            variables.append(i*n+j)
+        model.add_constraint(model.sum(names[o] for o in variables)<=1)
     
     time_start = time.time()
+    solution = model.solve()
 
-    problem.linear_constraints.add(lin_expr = constraints,
-                               senses = constraint_senses,
-                               rhs = rhs,
-                               names = constraint_names)
-
-    print("Constraints {}, variables {}".format(len(rhs),m*n))
-
-    problem.solve()
-
-    time_start = time.time()
     
     matches = []
-    x = problem.solution.get_values()
 
     k_addition = [0 for i in range(GROUPS)]
     
     for i in range(m):
         for j in range(n):
-            if x[i*n+j] == 1:
+            if solution.get_value("x{}_{}".format(i,j)) == 1:
                 matches.append((i,j))
                 price = rider_valuation[i]
                 cost = rider_costs[i]
