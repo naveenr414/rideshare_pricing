@@ -4,6 +4,7 @@ import time
 from math import e
 from docplex.mp.model import Model  # type: ignore
 from docplex.mp.linear import Var  # type: ignore
+import matplotlib.pyplot as plt
 
 class Driver:
     def __init__(self,time_in,time_out,initial_location):
@@ -61,12 +62,20 @@ for i in range(GROUPS):
     k_matrix[i][i] = random.random()/10+0.2
 
 total_profit = 0
+profit_over_time = []
+demand_over_time = []
+unsatisfied_demand_over_time = []
+
+num_occupied_drivers = []
 
 for epoch in range(TOTAL_EPOCHS):
+    if epoch % 60 == 0:
+        print(epoch//60)
+    
     time_start = time.time()
     line = ride_data.readline()
     rider_data = []
-    while "Flows" not in line:
+    while "Flows" not in line and line!='':
         rider_data.append(line)
         line = ride_data.readline()
 
@@ -150,7 +159,47 @@ for epoch in range(TOTAL_EPOCHS):
                 time_to_get = travel_times[drivers[j].location][rider.start]
                 drivers[j].set_occupied(True,time_to_get+dist+epoch)
 
+    num_occupied_drivers.append(len([i for i in drivers if i.occupied]))
+
     for i in range(GROUPS):
         k[i]+=k_addition[i]
                 
-    print(total_profit)
+    profit_over_time.append(total_profit)
+    demand_over_time.append(m)
+    unsatisfied_demand_over_time.append(m-len(matches))
+
+profit_over_time = np.array(profit_over_time)
+demand_over_time = np.array(demand_over_time)
+unsatisfied_demand_over_time = np.array(unsatisfied_demand_over_time)
+
+plt.figure(figsize=(10,10))
+plt.title("Profit over time",fontsize=20)
+plt.xlabel("Epoch",fontsize=14)
+plt.ylabel("Profit",fontsize=14)
+plt.xticks([0,8*60,16*60,24*60],fontsize=14)
+plt.yticks(fontsize=14)
+plt.plot(profit_over_time)
+plt.savefig("images/profit_baseline.png")
+#plt.show()
+
+plt.figure(figsize=(10,10))
+plt.title("Demand over time",fontsize=20)
+plt.xlabel("Epoch",fontsize=14)
+plt.ylabel("Demand",fontsize=14)
+plt.xticks([0,8*60,16*60,24*60],fontsize=14)
+plt.yticks(fontsize=14)
+plt.plot(demand_over_time)
+plt.savefig("images/demand_baseline.png")
+#plt.show()
+
+plt.figure(figsize=(10,10))
+plt.title("Unsatisfied demand over time",fontsize=20)
+plt.xlabel("Epoch",fontsize=14)
+plt.ylabel("Unsatisfied Demand",fontsize=14)
+plt.xticks([0,8*60,16*60,24*60],fontsize=14)
+plt.yticks(fontsize=14)
+plt.plot(unsatisfied_demand_over_time)
+plt.savefig("images/no_demand_baseline.png")
+#plt.show()
+
+print("Total Profit {}".format(total_profit))
