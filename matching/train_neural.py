@@ -3,7 +3,36 @@ from copy import deepcopy
 from docplex.mp.model import Model  # type: ignore
 from docplex.mp.linear import Var  # type: ignore
 import numpy as np
-import time 
+import time
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+class Net(nn.Module):
+
+    def __init__(self):
+        super(Net, self).__init__()
+        # 1 input image channel, 6 output channels, 5x5 square convolution
+        # kernel
+        self.fc1 = nn.Linear(19, 32)  # 5*5 from image dimension
+        self.fc2 = nn.Linear(32, 1)
+
+    def forward(self, x):
+        # Max pooling over a (2, 2) window
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+def value_function(state):
+    return float(net(torch.tensor(np.array(state)).float())[0])
+
+net = Net()
+
+optimizer = optim.SGD(net.parameters(), lr=0.01)
+criterion = nn.MSELoss()
+
+
 
 A_coeff = 10
 M_coeff = 1
@@ -11,6 +40,7 @@ delta = 3
 epsilon = 10
 initial_drivers = 10
 GROUPS = 10
+gamma = 0.9
 
 num_regions = 5
 regions = get_k_regions(5)
@@ -88,35 +118,46 @@ for epoch in range(TOTAL_EPOCHS):
             busy_drivers+=1
         else:
             idle_drivers+=1
-    current_state = num_by_location+[idle_drivers,busy_drivers]+k
 
+    net_data = []
+    target = []
     for i in range(m):
         for j in range(n):
             if solution.get_value("x{}_{}".format(i,j)) == 1:
+                current_state = num_by_location+[idle_drivers,busy_drivers]+k
                 matches.append((i,j))
                 g = riders[i].group
                 cost = rider_costs[i]
 
-                for price in range(100):
+                # Reject option
+                reward = 0
+                new_state = deepcopy(current_state)
+                new_state+=[regions[riders[i].start],g]
+                best_value = reward  + gamma*value_function(new_state)
+                
+                for price in np.arange(cost,rider_valuation[i],.1):
                     new_state = deepcopy(current_state)
-                    # Calculate value function
-
-                    print(cost,price,rider_valuation[i])
                     
-                    if price>cost and price<=rider_valuation[i]:
-                        reward = price-cost
-                        new_state[regions[drivers[j].location]]-=1
-                        new_state[regions[riders[i].end]]+=1
-                        for group_num in range(GROUPS):
-                            new_state[len(num_by_location)+2+group_num]+=k_matrix[group_num][g]*(rider_valuation[i]-price)
-                        new_state[len(num_by_location)]-=1
-                        new_state[len(num_by_location)+1]+=1
-                    else:
-                        reward = 0
+                    temp_reward = price-cost
+                    new_state[regions[drivers[j].location]]-=1
+                    new_state[regions[riders[i].end]]+=1
+                    for group_num in range(GROUPS):
+                        new_state[len(num_by_location)+2+group_num]+=k_matrix[group_num][g]*(rider_valuation[i]-price)
+                    new_state[len(num_by_location)]-=1
+                    new_state[len(num_by_location)+1]+=1
                     new_state+=[regions[riders[i].start],g]
 
-                    if reward>0:
-                        print("Reward {}, New State {}".format(reward,new_state))
+                    temp_value = temp_reward + gamma*value_function(new_state)
+
+                    if temp_value>best_value:
+                        best_value = temp_value
+                        reward = temp_reward
+                
+
+                current_state+=[regions[riders[i].start],g]
+                target.append([best_value])
+                net_data.append(current_state)
+
                 
                 price = price_baseline(riders[i])
 
@@ -131,4 +172,12 @@ for epoch in range(TOTAL_EPOCHS):
 
     for i in range(GROUPS):
         k[i]+=k_addition[i]
+    
+    if len(net_data)>0:
+        optimizer.zero_grad()   # zero the gradient buffers
+        output = net(torch.tensor(np.array(net_data)).float())
+        loss = criterion(output, torch.tensor(np.array(target)).float())
+        loss.backward()
+        optimizer.step()    # Does the update
 
+torch.save(net.state_dict(),"value_function.dict")
