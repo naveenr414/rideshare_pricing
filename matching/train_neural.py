@@ -32,8 +32,6 @@ net = Net()
 optimizer = optim.SGD(net.parameters(), lr=0.01)
 criterion = nn.MSELoss()
 
-
-
 A_coeff = 10
 M_coeff = 1
 delta = 3
