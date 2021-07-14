@@ -14,6 +14,13 @@ class Data:
         self.unsatisfied_demand_over_time = []
         self.num_occupied_drivers = []
 
+    def __dict__(self):
+        return {'total_profit': self.total_profit,
+                'profit_over_time': self.profit_over_time,
+                'demand_over_time': self.demand_over_time,
+                'unsatisfied_demand_over_time': self.unsatisfied_demand_over_time,
+                'num_occupied_drivers': self.num_occupied_drivers}
+
 class Driver:
     def __init__(self,time_in,time_out,initial_location):
         self.time_in = time_in
@@ -35,6 +42,15 @@ class Rider:
         self.group = group
 def sigmoid(x):
     return  2/(1+e**(-x))-1
+def get_k_regions(num_regions):    
+    a = open("data/zone_latlong.csv").read().strip().split("\n")    
+    a = [[i.split(",")[1],i.split(",")[2]] for i in a]
+    a = [[float(i[0]),float(i[1])] for i in a]
+    a = np.array(a)
+
+    kmeans = KMeans(n_clusters=num_regions,random_state=0).fit(a)
+    return kmeans.labels_
+
 driver_locations = open("data/taxi_3000_final.txt").read().strip().split("\n")
 driver_locations = [int(i) for i in driver_locations]
 
@@ -45,6 +61,9 @@ ride_data.readline()
 time_per_match = 60
 travel_times = np.load('data/zone_traveltime.npy')
 travel_times = np.round(travel_times/time_per_match)
+
+num_regions = 5
+regions = get_k_regions(num_regions)
 
 def get_ride_cost(rider,A_coeff):
     return A_coeff*travel_times[rider.start][rider.end]
@@ -80,19 +99,39 @@ def get_groups(GROUPS):
         k_matrix[i][i] = random.random()/10+0.2
     return k,k_matrix
 
-def get_k_regions(num_regions):    
-    a = open("data/zone_latlong.csv").read().strip().split("\n")    
-    a = [[i.split(",")[1],i.split(",")[2]] for i in a]
-    a = [[float(i[0]),float(i[1])] for i in a]
-    a = np.array(a)
-
-    kmeans = KMeans(n_clusters=num_regions,random_state=0).fit(a)
-    return kmeans.labels_
 
 def update_drivers(drivers,epoch):
     for i in range(len(drivers)):
         if drivers[i].occupied and drivers[i].free_epoch<=epoch:
             drivers[i].set_occupied(False,-1)
+
+def get_current_state(drivers,epoch):
+    current_state = []
+    num_by_location = [0 for i in range(num_regions)]
+
+    idle_drivers = 0
+    busy_drivers = 0
+
+    for i in range(len(drivers)):
+        num_by_location[regions[drivers[i].location]]+=1
+        if drivers[i].occupied:
+            busy_drivers+=1
+        else:
+            idle_drivers+=1
+    return num_by_location+[idle_drivers,busy_drivers]+[epoch//60]
+
+def update_state(new_state,rider,driver,k,k_matrix,valuation,price,epoch):
+    g = rider.group
+    new_state[regions[driver.location]]-=1
+    new_state[regions[rider.end]]+=1
+    new_state[num_regions+2] = (epoch+1)//60
+    for group_num in range(len(k)):
+        new_state[num_regions+3+group_num]+=k_matrix[group_num][g]*(valuation-price)
+    new_state[num_regions]-=1
+    new_state[num_regions+1]+=1
+
+    return new_state
+
 
 def solve_model(objective_values,m,n,riders,drivers,delta):
     model = Model()

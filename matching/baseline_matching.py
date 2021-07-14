@@ -2,6 +2,7 @@ import random
 import numpy as np
 import time
 from util import *
+import sys
 
 def price_baseline(rider):
     return rider.value+M_coeff*sigmoid(k[rider.group])
@@ -9,9 +10,14 @@ def price_baseline(rider):
 def price_maximal(rider):
     return epsilon + rider.value + M_coeff*sigmoid(k[rider.group])
 
-A_coeff = 10
-M_coeff = 1
-delta = 3
+if len(sys.argv>1):
+    A_coeff = int(sys.argv[1])
+    M_coeff = int(sys.argv[2])
+    delta = int(sys.argv[3])
+else:
+    A_coeff = 10
+    M_coeff = 1
+    delta = 3
 epsilon = 10
 initial_drivers = 10
 GROUPS = 10
@@ -23,7 +29,7 @@ data = Data()
 for epoch in range(TOTAL_EPOCHS):
     if epoch % 60 == 0:
         print(epoch//60)
-        print("Total Profit {}".format(data.total_profit))
+        print("Total Profit {}".format(round(data.total_profit)))
 
      
     riders = read_riders(A_coeff,GROUPS)
@@ -34,7 +40,6 @@ for epoch in range(TOTAL_EPOCHS):
 
     m = len(riders)
     n = len(drivers)
-
 
     objective_values = {}
     for i in range(m):
