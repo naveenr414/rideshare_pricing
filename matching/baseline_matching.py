@@ -65,3 +65,14 @@ for epoch in range(TOTAL_EPOCHS):
     move_drivers(riders,drivers,matches,epoch)
 
 print("Total Profit {}".format(data.total_profit))
+data_dict = data.__dict__()
+data_dict['type'] = 'baseline'
+data_dict['A_coeff'] = A_coeff
+data_dict['M_coeff'] = M_coeff
+data_dict['delta'] = delta
+data_dict['epsilon'] = epsilon
+data_dict['initial_drivers'] = initial_drivers
+data_dict['GROUPS'] = GROUPS
+data_dict['gamma'] = gamma
+pickle.dump(data_dict,open("results/"+str(int(time.time()))+".p","wb"))
+
