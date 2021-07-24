@@ -89,7 +89,9 @@ def read_riders(A_coeff,GROUPS):
     return riders
 
 def get_initial_drivers(initial_drivers):
-    return [Driver(0,TOTAL_EPOCHS,i) for i in driver_locations[:initial_drivers]]
+    locations = random.sample(driver_locations,initial_drivers)
+    
+    return [Driver(0,TOTAL_EPOCHS,i) for i in locations]
 
 def get_groups(GROUPS):
     random.seed(0)

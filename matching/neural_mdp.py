@@ -46,7 +46,7 @@ else:
 if len(sys.argv)>1:
     initial_drivers = int(sys.argv[1])
 else:
-    initial_drivers = 10
+    initial_drivers = 1
 A_coeff = 10
 M_coeff = 1
 delta = 3
