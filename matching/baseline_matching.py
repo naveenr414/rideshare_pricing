@@ -25,6 +25,8 @@ drivers = get_initial_drivers(initial_drivers)
 k,k_matrix = get_groups(GROUPS)
 data = Data()
 
+start = time.time()
+
 for epoch in range(TOTAL_EPOCHS):
     if epoch % 60 == 0:
         print(epoch//60)
@@ -73,5 +75,6 @@ data_dict['epsilon'] = epsilon
 data_dict['initial_drivers'] = initial_drivers
 data_dict['GROUPS'] = GROUPS
 data_dict['gamma'] = gamma
+data_dict['time'] = time.time()-start
 pickle.dump(data_dict,open("results/"+str(int(time.time()))+".p","wb"))
 
