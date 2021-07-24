@@ -41,7 +41,7 @@ if train:
 else:
     net.load_state_dict(torch.load("models/value_function.dict"))
 
-if len(sys.argv>1):
+if len(sys.argv)>1:
     initial_drivers = int(sys.argv[1])
 else:
     initial_drivers = 10

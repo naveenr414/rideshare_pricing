@@ -10,7 +10,7 @@ def price_baseline(rider):
 def price_maximal(rider):
     return epsilon + rider.value + M_coeff*sigmoid(k[rider.group])
 
-if len(sys.argv>1):
+if len(sys.argv)>1:
     initial_drivers = int(sys.argv[1])
 else:
     initial_drivers = 10
