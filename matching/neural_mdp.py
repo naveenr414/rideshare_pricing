@@ -10,8 +10,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 import pickle
 import sys
+import time
 
 train = False
+start = time.time()
 
 class Net(nn.Module):
 
@@ -147,4 +149,5 @@ data_dict['epsilon'] = epsilon
 data_dict['initial_drivers'] = initial_drivers
 data_dict['GROUPS'] = GROUPS
 data_dict['gamma'] = gamma
+data_dict['time'] = time.time()-start
 pickle.dump(data_dict,open("results/"+str(int(time.time()))+".p","wb"))
