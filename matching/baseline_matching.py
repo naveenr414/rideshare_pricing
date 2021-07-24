@@ -11,15 +11,14 @@ def price_maximal(rider):
     return epsilon + rider.value + M_coeff*sigmoid(k[rider.group])
 
 if len(sys.argv>1):
-    A_coeff = int(sys.argv[1])
-    M_coeff = int(sys.argv[2])
-    delta = int(sys.argv[3])
+    initial_drivers = int(sys.argv[1])
 else:
-    A_coeff = 10
-    M_coeff = 1
-    delta = 3
+    initial_drivers = 10
+
+A_coeff = 10
+M_coeff = 1
+delta = 3
 epsilon = 10
-initial_drivers = 10
 GROUPS = 10
 
 drivers = get_initial_drivers(initial_drivers)
