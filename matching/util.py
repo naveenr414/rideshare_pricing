@@ -9,17 +9,25 @@ import matplotlib.pyplot as plt
 class Data:
     def __init__(self):
         self.total_profit = 0
+        self.total_profit_over_time = []
         self.profit_over_time = []
         self.demand_over_time = []
         self.unsatisfied_demand_over_time = []
         self.num_occupied_drivers = []
+        self.revenue_over_time = []
+        self.serviced_riders_over_time = []
+        self.num_drivers_over_time = []
 
     def __dict__(self):
         return {'total_profit': self.total_profit,
                 'profit_over_time': self.profit_over_time,
                 'demand_over_time': self.demand_over_time,
                 'unsatisfied_demand_over_time': self.unsatisfied_demand_over_time,
-                'num_occupied_drivers': self.num_occupied_drivers}
+                'num_occupied_drivers': self.num_occupied_drivers,
+                'serviced_riders_over_time': self.serviced_riders_over_time,
+                'revenue_over_time': self.revenue_over_time,
+                'total_profit_over_time': self.total_profit_over_time,
+                'num_drivers_over_time': self.num_drivers_over_time}
 
 class Driver:
     def __init__(self,time_in,time_out,initial_location):
@@ -29,6 +37,7 @@ class Driver:
         self.occupied = False
         self.free_epoch = -1
         self.location = initial_location
+        self.min_price = np.random.normal(1.4,0.5)
 
     def set_occupied(self,occupied,free_epoch):
         self.occupied = occupied
@@ -91,7 +100,10 @@ def read_riders(A_coeff,GROUPS):
 def get_initial_drivers(initial_drivers):
     locations = random.sample(driver_locations,initial_drivers)
     
-    return [Driver(0,TOTAL_EPOCHS,i) for i in locations]
+    all_drivers = [Driver(0,TOTAL_EPOCHS,i) for i in locations]
+    random.shuffle(all_drivers)
+
+    return all_drivers
 
 def get_groups(GROUPS):
     random.seed(0)
@@ -102,10 +114,37 @@ def get_groups(GROUPS):
     return k,k_matrix
 
 
-def update_drivers(drivers,epoch):
+def update_drivers(drivers,all_drivers,epoch,data):
     for i in range(len(drivers)):
         if drivers[i].occupied and drivers[i].free_epoch<=epoch:
             drivers[i].set_occupied(False,-1)
+
+    if epoch<=60:
+        return drivers
+    
+    all_min_prices = set([i.min_price for i in drivers])
+    non_active_drivers = [i for i in all_drivers if i.min_price not in all_min_prices]
+
+    new_drivers = [i for i in drivers if i.occupied]
+
+    previous_prices = []
+
+    for e in range(epoch-60,epoch):
+        end = e
+        start = max(e-60,0)
+        
+        num_driven = data.serviced_riders_over_time[start:end]
+        num_profit = data.profit_over_time[start:end]
+        previous_prices.append(sum(num_profit)/sum(num_driven))
+
+    previous_prices = sorted(previous_prices)
+    median = previous_prices[len(previous_prices)//2]
+
+    new_non_active = [i for i in non_active_drivers if i.min_price<=median]
+    new_current = [i for i in drivers if not(i.occupied) and i.min_price<=median]
+
+    return new_drivers + new_current+new_non_active
+
 
 def get_current_state(drivers,epoch):
     current_state = []
@@ -187,10 +226,14 @@ def new_k(matches,valuations,prices,k_matrix,riders):
 
 def update_data(data,prices,costs,valuations,riders,drivers):
     data.num_occupied_drivers.append(len([i for i in drivers if i.occupied]))
-    data.total_profit+=np.sum(list(prices.values()))-np.sum(list(costs.values()))    
-    data.profit_over_time.append(data.total_profit)
+    data.total_profit+=np.sum(list(prices.values()))-np.sum(list(costs.values()))
+    data.revenue_over_time.append(np.sum(list(prices.values())))
+    data.profit_over_time.append(np.sum(list(prices.values()))-np.sum(list(costs.values())))
+    data.total_profit_over_time.append(data.total_profit)
     data.demand_over_time.append(len(riders))
     data.unsatisfied_demand_over_time.append(len(riders)-len(prices))
+    data.serviced_riders_over_time.append(len(prices))
+    data.num_drivers_over_time.append(len(drivers))
 
 def move_drivers(riders,drivers,matches,epoch):
     for (i,j) in matches:

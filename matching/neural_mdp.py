@@ -46,7 +46,7 @@ else:
 if len(sys.argv)>1:
     initial_drivers = int(sys.argv[1])
 else:
-    initial_drivers = 1
+    initial_drivers = 5
 A_coeff = 10
 M_coeff = 1
 delta = 3
@@ -54,17 +54,27 @@ epsilon = 10
 GROUPS = 10
 gamma = 0.5
 
-drivers = get_initial_drivers(initial_drivers)
+all_drivers = get_initial_drivers(initial_drivers*5)
+drivers = all_drivers[:initial_drivers]
+
 k,k_matrix = get_groups(GROUPS)
 data = Data()
 
 for epoch in range(TOTAL_EPOCHS):
-    if epoch % 60 == 0:
+    if epoch % 60 == 0 and epoch>0:
             print(epoch//60)
             print("Total Profit {}".format(round(data.total_profit)))
 
+            services = data.serviced_riders_over_time[-60:]
+            revenue_over_time = data.revenue_over_time[-60:]
+            profit_over_time = data.profit_over_time[-60:]
+
+            print("Profit/service {}".format(np.sum(profit_over_time)/np.sum(services)))
+            print("Revenue/service {}".format(np.sum(revenue_over_time)/np.sum(services)))
+            print("There are {} drivers".format(len(drivers)))
+
     riders = read_riders(A_coeff,M_coeff)
-    update_drivers(drivers,epoch)
+    drivers = update_drivers(drivers,all_drivers,epoch,data)
     rider_costs = [get_ride_cost(i,A_coeff) for i in riders]
     rider_valuation = [get_valuation(i,M_coeff,k) for i in riders]
 
