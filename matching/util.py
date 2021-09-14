@@ -6,6 +6,22 @@ from docplex.mp.model import Model  # type: ignore
 from docplex.mp.linear import Var  # type: ignore
 import matplotlib.pyplot as plt
 
+def read_from_file(file_name):
+    settings_list = {}
+    
+    f = open(file_name).read().split("\n")
+    for line in f:
+        if line!='':
+            name = line.split(":")[0]
+            if "," in line.split(": ")[1]:
+                value = line.split(": ")[1].split(",")
+            else:
+                value = eval(line.split(": ")[1])
+            settings_list[name] = value
+
+    return settings_list
+
+
 class Data:
     def __init__(self):
         self.total_profit = 0

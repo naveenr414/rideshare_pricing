@@ -1,0 +1,15 @@
+delta: 3
+driver_opportunity_cost_avg: 40
+epsilon: 10
+externality_multiplier: 2
+frictional_multiplier: 1
+gamma: 0.5
+GROUPS: 10
+initial_drivers: 5
+num_days: 5
+num_rides: 20
+rider_valuation_of_firm: 10
+real_riders: True
+total_drivers: 25
+TOTAL_EPOCHS: 1440
+train: True
