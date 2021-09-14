@@ -30,14 +30,14 @@ class Data:
                 'num_drivers_over_time': self.num_drivers_over_time}
 
 class Driver:
-    def __init__(self,time_in,time_out,initial_location):
+    def __init__(self,time_in,time_out,initial_location,driver_opportunity_cost_avg):
         self.time_in = time_in
         self.time_out = time_out
         self.initial_location = initial_location
         self.occupied = False
         self.free_epoch = -1
         self.location = initial_location
-        self.min_price = np.random.normal(1.4,0.5)
+        self.opportunity_cost_per_hour = driver_opportunity_cost_avg*np.random.normal(1,0.3)
 
     def set_occupied(self,occupied,free_epoch):
         self.occupied = occupied
@@ -47,6 +47,7 @@ class Rider:
     def __init__(self,start,end,value,group):
         self.start = start
         self.end = end
+        self.time_taken = travel_times[start][end]
         self.value = value
         self.group = group
 def sigmoid(x):
@@ -63,7 +64,11 @@ def get_k_regions(num_regions):
 driver_locations = open("data/taxi_3000_final.txt").read().strip().split("\n")
 driver_locations = [int(i) for i in driver_locations]
 
-ride_data = open("data/test_flow_5000_1.txt")
+all_ride_data = open("data/test_flow_5000_1.txt").read().strip().split("\n")[1:]
+all_ride_data = [i for i in all_ride_data if 'Flows' not in i]
+
+day_num = 1
+ride_data = open("data/test_flow_5000_{}.txt".format(day_num))
 TOTAL_EPOCHS = int(ride_data.readline())
 ride_data.readline()
 
@@ -74,33 +79,44 @@ travel_times = np.round(travel_times/time_per_match)
 num_regions = 5
 regions = get_k_regions(num_regions)
 
-def get_ride_cost(rider,A_coeff):
-    return A_coeff*travel_times[rider.start][rider.end]
+def get_ride_cost(rider,rider_avg_price):
+    time_taken = travel_times[rider.start][rider.end]
+    avg_cost = (time_taken/60)*rider_avg_price
+
+    return np.random.normal(1,0.5)*avg_cost
 
 def get_valuation(rider,M_coeff,k):
     return rider.value+M_coeff*sigmoid(k[rider.group])
 
-def read_riders(A_coeff,GROUPS):
+def process_ride_data(rider_data,rider_avg_price,GROUPS):
+    riders = []
+    for i in range(len(rider_data)):
+        temp = rider_data[i].split(",")
+        start = int(temp[0])
+        end = int(temp[1])
+        new_rider = Rider(start,end,0,random.randint(0,GROUPS-1))
+        new_rider.value = get_ride_cost(new_rider,rider_avg_price)
+        riders.append(new_rider)
+
+    return riders
+
+def random_rides(num_rides,rider_avg_price,GROUPS):
+    selected_rides = random.sample(all_ride_data,num_rides)
+    return process_ride_data(selected_rides,rider_avg_price,GROUPS)
+
+def read_riders(rider_avg_price,GROUPS):
     rider_data = []
     line = ride_data.readline()
     while "Flows" not in line and line!='':
         rider_data.append(line)
         line = ride_data.readline()
 
-    riders = []
-    for i in range(len(rider_data)):
-        temp = rider_data[i].split(",")
-        start = int(temp[0])
-        end = int(temp[1])
-        riders.append(Rider(start,end,0,random.randint(0,GROUPS-1)))
-        riders[-1].value = get_ride_cost(riders[-1],A_coeff)+(random.random()-0.5)*A_coeff/4
+    return process_ride_data(rider_data,rider_avg_price,GROUPS)
 
-    return riders
-
-def get_initial_drivers(initial_drivers):
+def get_initial_drivers(initial_drivers,driver_opportunity_cost_avg):
     locations = random.sample(driver_locations,initial_drivers)
     
-    all_drivers = [Driver(0,TOTAL_EPOCHS,i) for i in locations]
+    all_drivers = [Driver(0,TOTAL_EPOCHS,i,driver_opportunity_cost_avg) for i in locations]
     random.shuffle(all_drivers)
 
     return all_drivers
@@ -113,38 +129,49 @@ def get_groups(GROUPS):
         k_matrix[i][i] = random.random()/10+0.2
     return k,k_matrix
 
+def reset_day(new_day_num):
+    global day_num
+    global ride_data
+    
+    day_num = 1
+    ride_data = open("data/test_flow_5000_{}.txt".format(day_num))
+    ride_data.readline()
 
-def update_drivers(drivers,all_drivers,epoch,data):
+def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
+    # Look at the amount earned per hour by drivers
+    # Is this more or less than the opportunity cost 
+    
     for i in range(len(drivers)):
         if drivers[i].occupied and drivers[i].free_epoch<=epoch:
             drivers[i].set_occupied(False,-1)
+    new_drivers = [i for i in drivers if i.occupied]
+
 
     if epoch<=60:
         return drivers
     
-    all_min_prices = set([i.min_price for i in drivers])
-    non_active_drivers = [i for i in all_drivers if i.min_price not in all_min_prices]
+    all_min_prices = set([i.opportunity_cost_per_hour for i in drivers])
+    non_active_drivers = [i for i in all_drivers if i.opportunity_cost_per_hour not in all_min_prices]
 
-    new_drivers = [i for i in drivers if i.occupied]
+    previous_revenues = []
 
-    previous_prices = []
-
-    for e in range(epoch-60,epoch):
-        end = e
-        start = max(e-60,0)
+    for end in range(epoch-60,epoch):
+        start = max(end-60,0)
+        avg_num_drivers = np.mean(data.num_drivers_over_time[start:end])
+        total_driver_revenue = np.sum(data.revenue_over_time[start:end])*driver_comission
+        driver_average_revenue = total_driver_revenue/avg_num_drivers
+        driver_average_revenue/=((end-start)/60)
+        previous_revenues.append(driver_average_revenue)
         
-        num_driven = data.serviced_riders_over_time[start:end]
-        num_profit = data.profit_over_time[start:end]
-        previous_prices.append(sum(num_profit)/sum(num_driven))
+    previous_revenues = sorted(previous_revenues)
+    median_revenue = previous_revenues[len(previous_revenues)//2]
 
-    previous_prices = sorted(previous_prices)
-    median = previous_prices[len(previous_prices)//2]
+    new_non_active = [i for i in non_active_drivers if i.opportunity_cost_per_hour<=median_revenue]
+    new_current = [i for i in drivers if not(i.occupied) and i.opportunity_cost_per_hour<=median_revenue]
 
-    new_non_active = [i for i in non_active_drivers if i.min_price<=median]
-    new_current = [i for i in drivers if not(i.occupied) and i.min_price<=median]
-
-    return new_drivers + new_current+new_non_active
-
+    drivers = new_drivers + new_current+new_non_active
+    
+    return drivers
 
 def get_current_state(drivers,epoch):
     current_state = []
@@ -242,3 +269,9 @@ def move_drivers(riders,drivers,matches,epoch):
         time_to_get = travel_times[drivers[j].location][rider.start]
         drivers[j].set_occupied(True,time_to_get+dist+epoch)
         drivers[j].location = rider.end
+
+def rolling_average(l,num=60):
+    all_nums = []
+    for i in range(num,len(l)):
+            all_nums.append(np.mean(l[i-num:i]))
+    return all_nums
