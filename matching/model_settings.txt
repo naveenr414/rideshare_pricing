@@ -6,7 +6,7 @@ frictional_multiplier: 1
 gamma: 0.5
 GROUPS: 10
 initial_drivers: 5
-model_name: value_function.dict
+model_name: "value_function.dict"
 num_days: 5
 num_rides: 20
 rider_valuation_of_firm: 10

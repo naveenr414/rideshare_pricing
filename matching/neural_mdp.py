@@ -1,3 +1,20 @@
+def read_from_file(file_name):
+    settings_list = {}
+    
+    f = open(file_name).read().split("\n")
+    for line in f:
+        if line!='':
+            name = line.split(":")[0]
+            if "," in line.split(": ")[1]:
+                value = line.split(": ")[1].split(",")
+            else:
+                value = eval(line.split(": ")[1])
+            settings_list[name] = value
+
+    return settings_list
+
+settings_list = read_from_file("model_settings.txt")
+
 from util import *
 from copy import deepcopy
 from docplex.mp.model import Model  # type: ignore
@@ -12,7 +29,6 @@ import pickle
 import sys
 import time
 
-settings_list = read_from_file("model_settings.txt")
 
 class Net(nn.Module):
 
