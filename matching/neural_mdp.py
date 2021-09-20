@@ -47,7 +47,7 @@ if settings_list['train']:
     optimizer = optim.SGD(net.parameters(), lr=0.01)
     criterion = nn.MSELoss()
 else:
-    net.load_state_dict(torch.load("models/value_function.dict"))
+    net.load_state_dict(torch.load("models/{}".format(settings_list['model_name'])))
 
 print("Setup parameters")
 
@@ -172,7 +172,7 @@ for day in which_days[:settings_list['num_days']]:
     print("Finished one day")
 
 if settings_list['train']:
-    torch.save(net.state_dict(),"models/value_function.dict")
+    torch.save(net.state_dict(),"models/value_function_{}.dict".format(settings_list['num_days'])))
 
 print("Total profit {}".format(data.total_profit))
 data_dict = data.__dict__()
