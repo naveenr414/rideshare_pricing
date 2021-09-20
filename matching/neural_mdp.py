@@ -12,6 +12,8 @@ import pickle
 import sys
 import time
 
+settings_list = read_from_file("model_settings.txt")
+
 class Net(nn.Module):
 
     def __init__(self,input_size):
@@ -33,10 +35,8 @@ def value_function(state):
 def price_baseline(rider):
     return rider.value+M_coeff*sigmoid(k[rider.group])
 
-
 start = time.time()
 net = Net(20)
-settings_list = read_from_file("model_settings.txt")
 rider_valuation_of_driver = settings_list['driver_opportunity_cost_avg']
 rider_avg_price_per_hour = (settings_list['rider_valuation_of_firm']
                                              + rider_valuation_of_driver)*settings_list['frictional_multiplier']
@@ -172,7 +172,7 @@ for day in which_days[:settings_list['num_days']]:
     print("Finished one day")
 
 if settings_list['train']:
-    torch.save(net.state_dict(),"models/value_function_{}.dict".format(settings_list['num_days'])))
+    torch.save(net.state_dict(),"models/value_function_{}.dict".format(settings_list['num_days']))
 
 print("Total profit {}".format(data.total_profit))
 data_dict = data.__dict__()
