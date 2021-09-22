@@ -12,8 +12,13 @@ def read_from_file(file_name):
             settings_list[name] = value
 
     return settings_list
+import sys
 
-settings_list = read_from_file("model_settings.txt")
+file_name = "settings/model_settings.txt"
+if len(sys.argv)>1:
+    file_name = sys.argv[1]
+settings_list = read_from_file(file_name)
+print("Num days {}".format(settings_list['num_days']))
 
 from util import *
 from copy import deepcopy
@@ -26,7 +31,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import pickle
-import sys
 import time
 
 
