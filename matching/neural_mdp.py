@@ -15,6 +15,7 @@ def read_from_file(file_name):
 import sys
 
 file_name = "settings/model_settings.txt"
+print(sys.argv)
 if len(sys.argv)>1:
     file_name = sys.argv[1]
 settings_list = read_from_file(file_name)

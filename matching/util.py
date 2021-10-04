@@ -167,9 +167,19 @@ def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
     previous_revenues = sorted(previous_revenues)
     median_revenue = previous_revenues[len(previous_revenues)//2]
 
-    new_non_active = [i for i in non_active_drivers if i.opportunity_cost_per_hour<=median_revenue]
-    new_current = [i for i in drivers if not(i.occupied) and i.opportunity_cost_per_hour<=median_revenue]
+    new_non_active = [i for i in non_active_drivers if (i.opportunity_cost_per_hour<=median_revenue or random.random()<.005)]
+    for i in new_non_active:
+        i.time_in = epoch
 
+    new_current = []
+    for i in non_active_drivers:
+        stay = i.opportunity_cost_per_hour<=median_revenue or abs(i.time_in-epoch)<=60
+        stay = stay and (random.random()>.0025)
+        if stay:
+            new_current.append(i)
+        else:
+            i.time_out = epoch
+    
     drivers = new_drivers + new_current+new_non_active
     
     return drivers
