@@ -5,7 +5,7 @@ from sklearn.cluster import KMeans
 from docplex.mp.model import Model  # type: ignore
 from docplex.mp.linear import Var  # type: ignore
 import matplotlib.pyplot as plt
-
+import pickle
 
 class Data:
     def __init__(self):
@@ -18,6 +18,7 @@ class Data:
         self.revenue_over_time = []
         self.serviced_riders_over_time = []
         self.num_drivers_over_time = []
+        self.driver_extra_pay_over_time = []
 
     def __dict__(self):
         return {'total_profit': self.total_profit,
@@ -28,7 +29,8 @@ class Data:
                 'serviced_riders_over_time': self.serviced_riders_over_time,
                 'revenue_over_time': self.revenue_over_time,
                 'total_profit_over_time': self.total_profit_over_time,
-                'num_drivers_over_time': self.num_drivers_over_time}
+                'num_drivers_over_time': self.num_drivers_over_time,
+                'driver_extra_pay_over_time': self.driver_extra_pay_over_time}
 
 class Driver:
     def __init__(self,time_in,time_out,initial_location,driver_opportunity_cost_avg):
@@ -61,6 +63,8 @@ def get_k_regions(num_regions):
 
     kmeans = KMeans(n_clusters=num_regions,random_state=0).fit(a)
     return kmeans.labels_
+
+future_demand = pickle.load(open("time_model_1_hour.p","rb"))
 
 driver_locations = open("data/taxi_3000_final.txt").read().strip().split("\n")
 driver_locations = [int(i) for i in driver_locations]
@@ -147,7 +151,6 @@ def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
             drivers[i].set_occupied(False,-1)
     new_drivers = [i for i in drivers if i.occupied]
 
-
     if epoch<=60:
         return drivers
     
@@ -159,7 +162,7 @@ def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
     for end in range(epoch-60,epoch):
         start = max(end-60,0)
         avg_num_drivers = np.mean(data.num_drivers_over_time[start:end])
-        total_driver_revenue = np.sum(data.revenue_over_time[start:end])*driver_comission
+        total_driver_revenue = np.sum(data.revenue_over_time[start:end])*driver_comission+np.sum(data.driver_extra_pay_over_time[start:end])
         driver_average_revenue = total_driver_revenue/avg_num_drivers
         driver_average_revenue/=((end-start)/60)
         previous_revenues.append(driver_average_revenue)
@@ -168,13 +171,15 @@ def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
     median_revenue = previous_revenues[len(previous_revenues)//2]
 
     new_non_active = [i for i in non_active_drivers if (i.opportunity_cost_per_hour<=median_revenue or random.random()<.005)]
+
     for i in new_non_active:
         i.time_in = epoch
 
     new_current = []
     for i in non_active_drivers:
         stay = i.opportunity_cost_per_hour<=median_revenue or abs(i.time_in-epoch)<=60
-        stay = stay and (random.random()>.0025)
+        rand_leave = (random.random()>.0025)
+        stay = stay and rand_leave
         if stay:
             new_current.append(i)
         else:
@@ -262,16 +267,24 @@ def new_k(matches,valuations,prices,k_matrix,riders):
             k_addition[group_num]+=k_matrix[group_num][g]*(valuations[i]-prices[i])
     return k_addition
 
-def update_data(data,prices,costs,valuations,riders,drivers):
+def update_data(data,prices,costs,driver_extra_pay,valuations,riders,drivers):
     data.num_occupied_drivers.append(len([i for i in drivers if i.occupied]))
-    data.total_profit+=np.sum(list(prices.values()))-np.sum(list(costs.values()))
+    data.total_profit+=np.sum(list(prices.values()))-np.sum(list(costs.values()))-np.sum(list(driver_extra_pay.values()))
+    data.driver_extra_pay_over_time.append(np.sum(list(driver_extra_pay.values())))
     data.revenue_over_time.append(np.sum(list(prices.values())))
-    data.profit_over_time.append(np.sum(list(prices.values()))-np.sum(list(costs.values())))
+    data.profit_over_time.append(np.sum(list(prices.values()))-np.sum(list(costs.values()))--np.sum(list(driver_extra_pay.values())))
     data.total_profit_over_time.append(data.total_profit)
     data.demand_over_time.append(len(riders))
     data.unsatisfied_demand_over_time.append(len(riders)-len(prices))
     data.serviced_riders_over_time.append(len(prices))
     data.num_drivers_over_time.append(len(drivers))
+
+def predict_future_demand(data,epoch):
+    l = []
+    for mins_ago in [30,35,40,45,50,55,60]:
+        l.append(data.demand_over_time[-mins_ago])
+    l.append(epoch)
+    return future_demand.predict([l])[0]
 
 def move_drivers(riders,drivers,matches,epoch):
     for (i,j) in matches:

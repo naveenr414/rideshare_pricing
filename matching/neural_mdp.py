@@ -33,6 +33,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import pickle
 import time
+import matplotlib.pyplot as plt
 
 
 class Net(nn.Module):
@@ -63,7 +64,6 @@ rider_avg_price_per_hour = (settings_list['rider_valuation_of_firm']
                                              + rider_valuation_of_driver)*settings_list['frictional_multiplier']
 driver_comission = (rider_valuation_of_driver)/(settings_list['rider_valuation_of_firm']
                                                                                + rider_valuation_of_driver)
-
 if settings_list['train']:
     optimizer = optim.SGD(net.parameters(), lr=0.01)
     criterion = nn.MSELoss()
@@ -87,6 +87,7 @@ for day in which_days[:settings_list['num_days']]:
     print("On day {}".format(day))
     reset_day(day)
     for epoch in range(settings_list['TOTAL_EPOCHS']):
+        print("{} {}".format(epoch,data.total_profit))
 
         # Debugging 
         if epoch%60 == 0 and epoch>0:
@@ -101,6 +102,8 @@ for day in which_days[:settings_list['num_days']]:
                     print("Profit/service {}".format(np.sum(profit_over_time)/np.sum(services)))
                     print("Revenue/service {}".format(np.sum(revenue_over_time)/np.sum(services)))
                 print("There are {} drivers".format(len(drivers)))
+                plt.plot(data.num_drivers_over_time[-60:])
+                plt.show()
 
         if settings_list['real_riders']:
             # Get riders based on New York Data
@@ -126,6 +129,7 @@ for day in which_days[:settings_list['num_days']]:
 
         net_data = []
         targets = []
+
 
         for i in range(m):
             for j in range(n):
@@ -164,11 +168,23 @@ for day in which_days[:settings_list['num_days']]:
         costs = {} 
         valuations = {}
 
+        driver_extra_pay = {}
+        if epoch>60:
+            future_demand = predict_future_demand(data,epoch)
+            current_demand = m
+            print("Future demand {}, Current Demand {}".format(future_demand,m))
+        
         # Get matching LP
         for (i,j) in matches:
             current_state = deepcopy(baseline_state)+[regions[riders[i].start],riders[i].group]
             prices[i] = price_pairs[(i,j)]
-            costs[i] = 0 
+            costs[i] = 0.9*rider_valuation[i]
+            driver_extra_pay[i] = 0
+
+            if epoch>60:
+                if future_demand>current_demand:
+                    driver_extra_pay[i] = 10*(future_demand/current_demand)**.5
+            
             valuations[i] = rider_valuation[i]
             if settings_list['train']:
                 targets.append([objective_values[(i,j)]])
@@ -179,8 +195,9 @@ for day in which_days[:settings_list['num_days']]:
         for i in range(len(k)):
             k[i]+=k_addition[i]
 
+
         # Update data we track + move drivers
-        update_data(data,prices,costs,valuations,riders,drivers)
+        update_data(data,prices,costs,driver_extra_pay,valuations,riders,drivers)
         move_drivers(riders,drivers,matches,epoch)
 
         # If we're training, run loss on the model
