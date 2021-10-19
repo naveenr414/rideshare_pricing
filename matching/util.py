@@ -144,50 +144,64 @@ def reset_day(new_day_num):
 
 def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
     # Look at the amount earned per hour by drivers
-    # Is this more or less than the opportunity cost 
+    # Is this more or less than the opportunity cost
     
     for i in range(len(drivers)):
         if drivers[i].occupied and drivers[i].free_epoch<=epoch:
             drivers[i].set_occupied(False,-1)
-    new_drivers = [i for i in drivers if i.occupied]
 
     if epoch<=60:
         return drivers
     
     all_min_prices = set([i.opportunity_cost_per_hour for i in drivers])
+
+    print("Reservation prices range from {} to {}, with a mean of {}".format(np.min(list(all_min_prices)),
+                                                                             np.max(list(all_min_prices)),
+                                                                             np.mean(list(all_min_prices))))
+    
     non_active_drivers = [i for i in all_drivers if i.opportunity_cost_per_hour not in all_min_prices]
 
     previous_revenues = []
+    avg_revenue = []
+    avg_extra_pay = []
 
     for end in range(epoch-60,epoch):
         start = max(end-60,0)
         avg_num_drivers = np.mean(data.num_drivers_over_time[start:end])
+        avg_revenue.append((np.sum(data.revenue_over_time[start:end])*driver_comission/((end-start)/60))/avg_num_drivers)
+        avg_extra_pay.append((np.sum(data.driver_extra_pay_over_time[start:end])/((end-start)/60))/avg_num_drivers)
+        
         total_driver_revenue = np.sum(data.revenue_over_time[start:end])*driver_comission+np.sum(data.driver_extra_pay_over_time[start:end])
         driver_average_revenue = total_driver_revenue/avg_num_drivers
         driver_average_revenue/=((end-start)/60)
         previous_revenues.append(driver_average_revenue)
-        
+
+    print("Avg revenue {}, Avg extra pay {}".format(np.mean(avg_revenue),np.mean(avg_extra_pay)))
+    
     previous_revenues = sorted(previous_revenues)
     median_revenue = previous_revenues[len(previous_revenues)//2]
+    print("Total revenue {}".format(median_revenue))
 
     new_non_active = [i for i in non_active_drivers if (i.opportunity_cost_per_hour<=median_revenue or random.random()<.005)]
 
     for i in new_non_active:
         i.time_in = epoch
 
-    new_current = []
-    for i in non_active_drivers:
-        stay = i.opportunity_cost_per_hour<=median_revenue or abs(i.time_in-epoch)<=60
+    current_drivers = []
+    for i in drivers:
+        stay = i.opportunity_cost_per_hour<=median_revenue or abs(i.time_in-epoch)<=60 or i.occupied
         rand_leave = (random.random()>.0025)
-        stay = stay and rand_leave
+        stay = stay and rand_leave or i.occupied
         if stay:
-            new_current.append(i)
+            current_drivers.append(i)
         else:
             i.time_out = epoch
     
-    drivers = new_drivers + new_current+new_non_active
+    new_drivers = current_drivers + new_non_active
+
+    print("Number of drivers {} out of {}".format(len(new_drivers),len(all_drivers)))
     
-    return drivers
+    return new_drivers
 
 def get_current_state(drivers,epoch):
     current_state = []
