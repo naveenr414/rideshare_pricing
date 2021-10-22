@@ -6,6 +6,9 @@ from docplex.mp.model import Model  # type: ignore
 from docplex.mp.linear import Var  # type: ignore
 import matplotlib.pyplot as plt
 import pickle
+import torch.nn as nn
+import torch
+import torch.nn.functional as F
 
 class Data:
     def __init__(self):
@@ -63,6 +66,26 @@ def get_k_regions(num_regions):
 
     kmeans = KMeans(n_clusters=num_regions,random_state=0).fit(a)
     return kmeans.labels_
+
+class Net(nn.Module):
+
+    def __init__(self,input_size):
+        super(Net, self).__init__()
+        # 1 input image channel, 6 output channels, 5x5 square convolution
+        # kernel
+        self.fc1 = nn.Linear(input_size, 32)  # 5*5 from image dimension
+        self.fc2 = nn.Linear(32, 1)
+
+    def forward(self, x):
+        # Max pooling over a (2, 2) window
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+# What's the value of being in a state (# riders * locations)
+def value_function(net,state):
+    return float(net(torch.tensor(np.array(state)).float())[0])
+
 
 future_demand = pickle.load(open("time_model_1_hour.p","rb"))
 
@@ -155,10 +178,6 @@ def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
     
     all_min_prices = set([i.opportunity_cost_per_hour for i in drivers])
 
-    print("Reservation prices range from {} to {}, with a mean of {}".format(np.min(list(all_min_prices)),
-                                                                             np.max(list(all_min_prices)),
-                                                                             np.mean(list(all_min_prices))))
-    
     non_active_drivers = [i for i in all_drivers if i.opportunity_cost_per_hour not in all_min_prices]
 
     previous_revenues = []
@@ -175,12 +194,9 @@ def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
         driver_average_revenue = total_driver_revenue/avg_num_drivers
         driver_average_revenue/=((end-start)/60)
         previous_revenues.append(driver_average_revenue)
-
-    print("Avg revenue {}, Avg extra pay {}".format(np.mean(avg_revenue),np.mean(avg_extra_pay)))
     
     previous_revenues = sorted(previous_revenues)
     median_revenue = previous_revenues[len(previous_revenues)//2]
-    print("Total revenue {}".format(median_revenue))
 
     new_non_active = [i for i in non_active_drivers if (i.opportunity_cost_per_hour<=median_revenue or random.random()<.005)]
 
@@ -198,8 +214,6 @@ def update_drivers(drivers,all_drivers,epoch,data,driver_comission):
             i.time_out = epoch
     
     new_drivers = current_drivers + new_non_active
-
-    print("Number of drivers {} out of {}".format(len(new_drivers),len(all_drivers)))
     
     return new_drivers
 
@@ -272,6 +286,21 @@ def solve_model(objective_values,m,n,riders,drivers,delta):
                 matches.append((i,j))
 
     return matches
+
+def read_from_file(file_name):
+    settings_list = {}
+    
+    f = open(file_name).read().split("\n")
+    for line in f:
+        if line!='':
+            name = line.split(":")[0]
+            if "," in line.split(": ")[1]:
+                value = line.split(": ")[1].split(",")
+            else:
+                value = eval(line.split(": ")[1])
+            settings_list[name] = value
+
+    return settings_list
 
 def new_k(matches,valuations,prices,k_matrix,riders):
     k_addition = [0 for i in range(len(k_matrix))]
