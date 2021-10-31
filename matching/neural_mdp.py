@@ -12,7 +12,7 @@ import time
 import matplotlib.pyplot as plt
 
 def objective_function(price,cost):
-    return -(price-cost)
+    return price-cost
 
 start = time.time()
 
@@ -74,7 +74,9 @@ for day in which_days[:settings_list['num_days']]:
             riders = random_rides(settings_list['num_rides'],rider_avg_price_per_hour,settings_list['GROUPS'])
 
         # Based on driving history, update as drivers enter/leave the system
+        start_drivers = time.time()
         drivers = update_drivers(drivers,all_drivers,epoch,data,driver_comission)
+        print("Took {} time to update drivers".format(time.time()-start_drivers))
 
         # How much are riders willing to pay, based on their valuation + externalities 
         rider_valuation = [get_valuation(i,settings_list['externality_multiplier'],k) for i in riders]
@@ -91,15 +93,28 @@ for day in which_days[:settings_list['num_days']]:
         net_data = []
         targets = []
 
+        num_available_drivers = set()
+
+        cost_multiplier = 0.2
+        
+        time_spent = {'new_state':0,'best_price':0,'update_state':0,'num_times_run':0}
+
+        net.eval()
 
         for i in range(m):
             for j in range(n):
+                lp_time = time.time()
+
                 # What is the optimal price for rider i, driver j? 
-                cost = 0.5*rider_valuation[i]
+                cost = cost_multiplier*rider_valuation[i]
                 current_state = deepcopy(baseline_state)+[regions[riders[i].start],riders[i].group]
+
+                time_spent['new_state']+=time.time()-lp_time
+                lp_time = time.time()
 
                 # The best price is 0; not being serviced 
                 best_pair = {'value':settings_list['gamma']*value_function(net,current_state),'price':0}
+
 
                 # If the driver can service, try 100 different price ranges
                 # From cost (the most we can do to break even) to 150% more
@@ -108,19 +123,28 @@ for day in which_days[:settings_list['num_days']]:
                         price = 0
                         prie_range = [0]
                     else:
-                        price_range = np.arange(cost,rider_valuation[i]*1.5,(rider_valuation[i]*1.5-cost)/100)
+                        price_range = range(int(cost*0.5),round(rider_valuation[i]*1.5))
+                    
+                        num_available_drivers.add(j)
 
                     # Compute the immideate reward, and the long term value
                     for price in price_range:
+                        lp_time = time.time()
                         new_state = deepcopy(current_state)
 
                         # OBJ: Change reward
                         reward = objective_function(price,cost)
                         new_state = update_state(new_state,riders[i],drivers[j],k,k_matrix,rider_valuation[i],price,epoch)
+                        time_spent['update_state']+=time.time()-lp_time
+                        time_spent['num_times_run']+=1
+
+                        lp_time = time.time()
                         total_value = reward + settings_list['gamma']*value_function(net,new_state)
+                        time_spent['best_price']+=time.time()-lp_time
 
                         if total_value>best_pair['value']:
                             best_pair = {'value': total_value, 'price': price}
+
 
                 # If the best price is 0, don't match them
                 if best_pair['price'] == 0:
@@ -129,6 +153,18 @@ for day in which_days[:settings_list['num_days']]:
                 else:
                     price_pairs[(i,j)] = best_pair['price']
                     objective_values[(i,j)] = best_pair['value']
+
+                    if best_pair['value']<1:
+                        pass
+                        """print("Low value")
+                        print("Best value {}".format(best_pair['value']))
+                        print("Best price {}".format(best_pair['price']))
+                        print("Rider valuation {}".format(rider_valuation[i]))
+                        print("Current value {}".format(value_function(net,current_state)))"""
+
+        print("Epcoh {}".format(epoch))
+        print(time_spent)
+        print("There are {} riders and {} drivers".format(m,len(num_available_drivers)))
 
         # Solve the LP, based on MDP values
         matches = solve_model(objective_values,m,n,riders,drivers,settings_list['delta'])
@@ -141,24 +177,37 @@ for day in which_days[:settings_list['num_days']]:
         if epoch>60:
             future_demand = predict_future_demand(data,epoch)
             current_demand = m
+
+        print("There are {} matches".format(len(matches)))
         
         # Get matching LP
         for (i,j) in matches:
             current_state = deepcopy(baseline_state)+[regions[riders[i].start],riders[i].group]
             prices[i] = price_pairs[(i,j)]
-            costs[i] = 0.5*rider_valuation[i]
+            # Costs due to maintenance, etc. 
+            costs[i] = cost_multiplier*rider_valuation[i]
 
             # Should we pay the driver extra, at a cost to the firm? 
             driver_extra_pay[i] = 0
-            if epoch>60:
+            if epoch>60 and False:
                 if future_demand>current_demand*settings_list['extra_pay_cutoff']:
                     driver_extra_pay[i] = settings_list['extra_pay_multiplier']*prices[i]
 
             # Update the network, so it associates our current state with an objective function
             valuations[i] = rider_valuation[i]
+
+            if objective_values[(i,j)] < 0:
+                print("Passing in {} value".format(objective_values[(i,j)]))
+            
             if settings_list['train']:
                 targets.append([objective_values[(i,j)]])
                 net_data.append(current_state)
+
+        if len(prices):
+            print("Total profit {}".format(sum(prices.values())))
+
+        print()
+
 
         # Update K based on matches
         k_addition = new_k(matches,valuations,prices,k_matrix,riders)
@@ -172,6 +221,7 @@ for day in which_days[:settings_list['num_days']]:
 
         # If we're training, run loss on the model
         if settings_list['train'] and len(matches)>0:
+            net.train()
             optimizer.zero_grad()   
             output = net(torch.tensor(np.array(net_data)).float())
             loss = criterion(output, torch.tensor(np.array(targets)).float())

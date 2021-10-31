@@ -111,7 +111,7 @@ def get_ride_cost(rider,rider_avg_price):
     time_taken = travel_times[rider.start][rider.end]
     avg_cost = (time_taken/60)*rider_avg_price
 
-    return np.random.normal(1,0.5)*avg_cost
+    return np.random.normal(1,0.5)*avg_cost + 10
 
 def get_valuation(rider,M_coeff,k):
     return rider.value+M_coeff*sigmoid(k[rider.group])
@@ -250,6 +250,8 @@ def solve_model(objective_values,m,n,riders,drivers,delta):
     names = []
     objective = []
 
+    num_valid_pairs = 0
+
     for i in range(m):
         for j in range(n):
             variable = model.continuous_var(name='x{}_{}'.format(i, j))
@@ -258,10 +260,13 @@ def solve_model(objective_values,m,n,riders,drivers,delta):
             driver_loc = drivers[j].location
             rider_loc = riders[i].start
             upper_bound = int(not(drivers[j].occupied or travel_times[driver_loc][rider_loc]>delta))
+            num_valid_pairs+=upper_bound
             
             model.add_constraint(variable<=upper_bound)
     score = model.sum(objective[i] * names[i] for i in range(len(names)))
     model.maximize(score)
+
+    print("Number of valid pairs {}".format(num_valid_pairs))
 
     for i in range(m):
         variables = []
@@ -284,6 +289,9 @@ def solve_model(objective_values,m,n,riders,drivers,delta):
         for j in range(n):
             if solution.get_value("x{}_{}".format(i,j)) == 1:
                 matches.append((i,j))
+
+    if len(matches) == 0 and num_valid_pairs>0:
+        print([i for i in objective if i>0])
 
     return matches
 
